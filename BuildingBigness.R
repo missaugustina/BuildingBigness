@@ -8,15 +8,15 @@
 
 require(igraph)
 
-Ten <- read.csv("TenMetadata.csv",header=TRUE)
-Ala <- read.csv("AlaMetadata.csv",header=TRUE)
+Ten <- read.csv("PublicFiles/TenMetadata.csv",header=TRUE)
+Ala <- read.csv("PublicFiles/AlaMetadata.csv",header=TRUE)
 
 
 ##############
 ## Tenpatti ##
 ##############
 
-elTen <- read.csv("TenEdgeList.csv")
+elTen <- read.csv("PublicFiles/TenEdgeList.csv")
 
 elSocTen <- elTen[,c(1:14,23)]
 elSocTen <- subset(elSocTen, (ImpIss > 0 | Work > 0 | Errand > 0 | Borrow > 0 | Cash > 0 | Loan > 0 | Babysit > 0 | Talk > 0 | Defend > 0 | Position > 0 | Close > 0 | Advice > 0))
@@ -56,7 +56,7 @@ snaTenStrengthI <- graph.adjacency(t(get.adjacency(snaTenStrength,sparse=FALSE))
 ## Azhagapuram ##
 #################
 
-elAla <- read.csv("AlaEdgeList.csv")
+elAla <- read.csv("PublicFiles/AlaEdgeList.csv")
 
 elSocAla <- elAla[,c(1:14,23)]
 elSocAla <- subset(elSocAla, (ImpIss > 0 | Work > 0 | Errand > 0 | Borrow > 0 | Cash > 0 | Loan > 0 | Babysit > 0 | Talk > 0 | Defend > 0 | Position > 0 | Close > 0 | Advice > 0))
@@ -96,7 +96,7 @@ snaAlaStrengthI <- graph.adjacency(t(get.adjacency(snaAlaStrength,sparse=FALSE))
 ## Kinship Networks ##
 ######################
 
-closekinEL <- read.csv("CloseKinEdgeList.csv",header=TRUE)
+closekinEL <- read.csv("PublicFiles/CloseKinEdgeList.csv",header=TRUE)
 
 require(car)
 
@@ -120,8 +120,8 @@ knetAla<-kinship(snaAlaSup)
 ## Household Distance ##
 ########################
 
-TenIndivDist<-read.csv("TenIndivDist.csv",as.is=TRUE)
-AlaIndivDist<-read.csv("AlaIndivDist.csv",as.is=TRUE)
+TenIndivDist<-read.csv("PublicFiles/TenIndivDist.csv",as.is=TRUE)
+AlaIndivDist<-read.csv("PublicFiles/AlaIndivDist.csv",as.is=TRUE)
 
 ## first making empty matrix with names as the House ID
 Tendistancemat <-matrix(nrow=length(V(snaTenSup)$name),ncol=length(V(snaTenSup)$name),dimnames=list(as.vector(V(snaTenSup)$name),as.vector(V(snaTenSup)$name)))
@@ -267,8 +267,8 @@ xtable(results,digits=c(3,3,3,3,4))
 # TERGMpredict_building_requesting.csv changes the nodeicov and nodeocov reputation terms
 # For adding sharing partners; a tie between two nodes with no shared partners has a GWESP change statistic of 0; a tie that closes one triangle has a GWESP change statistic of 1 (one triangle contains three pairs of nodes with one shared partner)
 
-Tpredergm<-read.csv("TERGMpredict_building_requesting.csv",header=TRUE,as.is=TRUE)
-#Tpredergm<-read.csv("TERGMpredict_building_giving.csv",header=TRUE,as.is=TRUE)
+Tpredergm<-read.csv("PublicFiles/TERGMpredict_building_requesting.csv",header=TRUE,as.is=TRUE)
+#Tpredergm<-read.csv("PublicFiles/TERGMpredict_building_giving.csv",header=TRUE,as.is=TRUE)
 
 
 #plots of model predictions
@@ -326,8 +326,8 @@ dev.off()
 
 ## same for Alagapuram
 
-Apredergm<-read.csv("AERGMpredict_building_requesting.csv",header=TRUE,as.is=TRUE)
-#Apredergm<-read.csv("AERGMpredict_building_giving.csv",header=TRUE,as.is=TRUE)
+Apredergm<-read.csv("PublicFiles/AERGMpredict_building_requesting.csv",header=TRUE,as.is=TRUE)
+#Apredergm<-read.csv("PublicFiles/AERGMpredict_building_giving.csv",header=TRUE,as.is=TRUE)
 
 #plots of model predictions
 
@@ -749,3 +749,4 @@ a_pca<-fviz_pca_biplot(ala.pca, repel = TRUE,
 )
 
 a_pca
+

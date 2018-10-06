@@ -1,0 +1,362 @@
+---
+title: "Building Bigness - Reputation vs Social Capital"
+output: html_document
+params:
+  data_dir: "PublicFiles"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r includes}
+library(car)
+library(here)
+library(igraph)
+
+require(intergraph)
+require(network)
+require(ergm)
+
+```
+
+```{r, message=FALSE}
+library(here)
+library(tidyverse)
+```
+
+
+
+# Data
+
+What are the data files, how were they created, and how does one get them? If they contain personal info, can they be anonymized or reduced so something partial can be provided that shows the expected data format?
+
+Data files should be saved to the "downloads" folder. This name can be changed in the "data_dir" parameter above.
+
+```{r, message=FALSE}
+
+Ten <- read_csv(here::here(params$data_dir, "TenMetadata.csv"))
+Ala <- read_csv(here::here(params$data_dir, "AlaMetadata.csv"))
+```
+
+## Tenpatti
+
+Graphs of Reputation and Social Support.
+
+
+```{r edgelist-tenpatti, message=FALSE}
+elTen <- read_csv(here::here(params$data_dir, "TenEdgeList.csv"))
+```
+
+Social Support Graph
+
+```{r social-support-tenpatti}
+
+# select social support columns
+elSocTen <- elTen[,c(1:14,23)]
+
+# filter out any that weren't nominated
+elSocTen <- elSocTen %>% filter(SupSum > 0)
+
+# Link actors to demographic data
+# get a list of all Actors
+attTen <- bind_rows(elSocTen %>% select(IndivID=Ego), 
+                    elSocTen %>% select(IndivID=Alter)) %>% # combine Ego and Alter into one column
+  unique() %>% # remove duplicates
+  full_join(Ten, by="IndivID") # combine with metadata
+
+# Create a graph with the demographic data
+snaTenSupFull <- graph.data.frame(d = elSocTen, vertices = attTen, directed=TRUE)
+
+## reduce the network down to include only those who completed the survey in the village
+## if a node isn't outwardly connected to any other, then they didn't nominate anybody, indicating they didn't complete the survey
+snaTenSup <- delete_vertices(snaTenSupFull, which(degree(snaTenSupFull, mode="out")==0))
+```
+
+```{r, reputation-tenpatti}
+
+## To get networks of reputational nominations
+snaTenFull <- graph.data.frame(d = elTen, directed=TRUE)
+# Remove 
+snaTenFull <- delete_vertices(snaTenFull, which(degree(snaTenFull, mode="out")==0))
+
+## This represents a tie from A to B, if A nominated B
+snaTenGenerous <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "Generous") == 0])
+snaTenAllAdvice <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "AllAdvice") == 0])
+snaTenInfluence <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "Influence") == 0])
+snaTenCharacter <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "Character") == 0])
+snaTenStrength <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "Strength") == 0])
+
+## This represents a tie from A to B, if B nominated A as 
+snaTenGenerousI <- graph.adjacency(t(get.adjacency(snaTenGenerous,sparse=FALSE)))
+snaTenAllAdviceI <- graph.adjacency(t(get.adjacency(snaTenAllAdvice,sparse=FALSE)))
+snaTenInfluenceI <- graph.adjacency(t(get.adjacency(snaTenInfluence,sparse=FALSE)))
+snaTenCharacterI <- graph.adjacency(t(get.adjacency(snaTenCharacter,sparse=FALSE)))
+snaTenStrengthI <- graph.adjacency(t(get.adjacency(snaTenStrength,sparse=FALSE)))
+```
+
+## Azhagapuram
+
+```{r reputation-graph-azhagapuram}
+
+elAla <- read.csv("AlaEdgeList.csv")
+
+elSocAla <- elAla[,c(1:14,23)]
+elSocAla <- subset(elSocAla, (ImpIss > 0 | Work > 0 | Errand > 0 | Borrow > 0 | Cash > 0 | Loan > 0 | Babysit > 0 | Talk > 0 | Defend > 0 | Position > 0 | Close > 0 | Advice > 0))
+
+
+snaAla <- graph.data.frame(elSocAla)
+V(snaAla)$label <- V(snaAla)$name
+IndivIDAla <- V(snaAla)$label
+IndivIDAla <- data.frame(IndivIDAla)
+
+attAla <- merge(IndivIDAla,Ala,by.x="IndivIDAla",by.y="IndivID",sort=FALSE,all.x=TRUE)
+colnames(attAla)[1] <- "IndivID"
+
+snaAlaSupFull <- graph.data.frame(d = elSocAla, vertices = attAla, directed=TRUE)
+
+## reduce the network down to include only those who completed the survey in the village
+snaAlaSup <- delete.vertices(snaAlaSupFull,V(snaAlaSupFull)[degree(snaAlaSupFull,mode="out")==0])
+
+## To get networks of reputational nominations
+# each "type" is its own graph
+snaAlaFull <- graph.data.frame(d = elAla, directed=TRUE)
+snaAlaFull <- delete.vertices(snaAlaFull,V(snaAlaFull)[degree(snaAlaFull,mode="out")==0])
+
+snaAlaGenerous <- delete.edges(snaAlaFull, E(snaAlaFull)[get.edge.attribute(snaAlaFull, name = "Generous") == 0])
+snaAlaAllAdvice <- delete.edges(snaAlaFull, E(snaAlaFull)[get.edge.attribute(snaAlaFull, name = "AllAdvice") == 0])
+snaAlaInfluence <- delete.edges(snaAlaFull, E(snaAlaFull)[get.edge.attribute(snaAlaFull, name = "Influence") == 0])
+snaAlaCharacter <- delete.edges(snaAlaFull, E(snaAlaFull)[get.edge.attribute(snaAlaFull, name = "Character") == 0])
+snaAlaStrength <- delete.edges(snaAlaFull, E(snaAlaFull)[get.edge.attribute(snaAlaFull, name = "Strength") == 0])
+
+snaAlaGenerousI <- graph.adjacency(t(get.adjacency(snaAlaGenerous,sparse=FALSE)))
+snaAlaAllAdviceI <- graph.adjacency(t(get.adjacency(snaAlaAllAdvice,sparse=FALSE)))
+snaAlaInfluenceI <- graph.adjacency(t(get.adjacency(snaAlaInfluence,sparse=FALSE)))
+snaAlaCharacterI <- graph.adjacency(t(get.adjacency(snaAlaCharacter,sparse=FALSE)))
+snaAlaStrengthI <- graph.adjacency(t(get.adjacency(snaAlaStrength,sparse=FALSE)))
+
+```
+
+# NETWORK MEASURES OF SOCIAL CAPITAL vs. REPUTATION
+
+```{r}
+
+TenSupname <- V(snaTenSup)$name
+
+Tsupsum<-E(snaTenSup)$ImpIss+E(snaTenSup)$Work+E(snaTenSup)$Errand+E(snaTenSup)$Borrow+E(snaTenSup)$Cash+E(snaTenSup)$Loan+E(snaTenSup)$Babysit+E(snaTenSup)$Talk+E(snaTenSup)$Defend+E(snaTenSup)$Position+E(snaTenSup)$Close+E(snaTenSup)$Advice
+
+TenprwSup <- page.rank(snaTenSup,directed=TRUE,weights=Tsupsum)
+
+Ten$WeightedPageRank <- TenprwSup$vector
+
+
+
+Asupsum<-E(snaAlaSup)$ImpIss+E(snaAlaSup)$Work+E(snaAlaSup)$Errand+E(snaAlaSup)$Borrow+E(snaAlaSup)$Cash+E(snaAlaSup)$Loan+E(snaAlaSup)$Babysit+E(snaAlaSup)$Talk+E(snaAlaSup)$Defend+E(snaAlaSup)$Position+E(snaAlaSup)$Close+E(snaAlaSup)$Advice
+
+AlaprwSup <- page.rank(snaAlaSup,directed=TRUE,weights=Asupsum)
+
+Ala$WeightedPageRank <- AlaprwSup$vector
+
+
+Ala$WPRscaled<-Ala$WeightedPageRank/max(Ala$WeightedPageRank)
+Ten$WPRscaled<-Ten$WeightedPageRank/max(Ten$WeightedPageRank)
+
+
+palette(c("orchid", "forestgreen"))
+palette(adjustcolor(palette(), alpha.f = 0.5))
+
+
+## Influence, Generous
+# WITHOUT GENDER, LOESS
+require(msir)
+pdf("centrality_results_wprinflgen.pdf", height=3, width=3, pointsize=6)
+par(mfrow=c(2,2), mar=c(0.5,4,4,0.5))
+plot(Ten$WPRscaled, Ten$InfluenceScaled, pch=19, cex=0.5, main="Tenpatti", axes=F, ylab="GivesGoodAdvice", xlab="")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+axis(2, lwd=0.5)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ten$WPRscaled, Ten$InfluenceScaled, pch=19, cex=0.5)
+#lines(loess.smooth(Ten$WPRscaled, Ten$InfluenceScaled, span = 0.8, degree = 1, family = c("gaussian")), lwd=1)
+lines(l<-loess.sd(Ten$InfluenceScaled~Ten$WPRscaled))
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("black",alpha.f=0.25),border=NA)
+
+par(mar=c(0.5,0.5,4,4))
+plot(Ala$WPRscaled, Ala$InfluenceScaled,  main="Azhagapuram", axes=F, ylab="", xlab="")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ala$WPRscaled, Ala$InfluenceScaled, pch=19, cex=0.5)
+#lines(loess.smooth(Ala$WPRscaled, Ala$InfluenceScaled, span = 0.8, degree = 1, family = c("gaussian")), lwd=1)
+lines(l<-loess.sd(Ala$InfluenceScaled~Ala$WPRscaled))
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("black",alpha.f=0.25),border=NA)
+
+par(mar=c(4,4,0.5,0.5)) 
+plot(Ten$WPRscaled, Ten$GenerousScaled, axes=F, ylab="GoodGenerous", xlab="Weighted PageRank centrality")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+axis(2, lwd=0.5)
+axis(1, lwd=0.5)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ten$WPRscaled, Ten$GenerousScaled, pch=19, cex=0.5)
+lines(l<-loess.sd(Ten$GenerousScaled~Ten$WPRscaled))
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("black",alpha.f=0.25),border=NA)
+
+par(mar=c(4,0.5,0.5,4))
+plot(Ala$WPRscaled, Ala$GenerousScaled, axes=F, ylab="", xlab="Weighted PageRank centrality")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+axis(1, lwd=0.5)
+points(Ala$WPRscaled, Ala$GenerousScaled, pch=19, cex=0.5)
+lines(l<-loess.sd(Ala$GenerousScaled~Ala$WPRscaled))
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("black",alpha.f=0.25),border=NA)
+dev.off()
+
+
+# WITH GENDER, LOESS
+pdf("centrality_results_wprinflgenGEN.pdf", height=3, width=3, pointsize=6)
+par(mfrow=c(2,2), mar=c(0.5,4,4,0.5))
+plot(Ten$WPRscaled, Ten$InfluenceScaled, pch=19, cex=0.5, main="Tenpatti", axes=F, ylab="GivesGoodAdvice", xlab="")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+axis(2, lwd=0.5)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ten$WPRscaled, Ten$InfluenceScaled, col=Ten$Gender, pch=19, cex=0.5)
+lines(l<-loess.sd(Ten$InfluenceScaled[which(Ten$Gender=="Female")]~Ten$WPRscaled[which(Ten$Gender=="Female")]),col="orchid")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("orchid",alpha.f=0.25),border=NA)
+lines(l<-loess.sd(Ten$InfluenceScaled[which(Ten$Gender=="Male")]~Ten$WPRscaled[which(Ten$Gender=="Male")]),col="forestgreen")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("forestgreen",alpha.f=0.25),border=NA)
+
+
+par(mar=c(0.5,0.5,4,4))
+plot(Ala$WPRscaled, Ala$InfluenceScaled,  main="Azhagapuram", axes=F, ylab="", xlab="")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ala$WPRscaled, Ala$InfluenceScaled, col=Ala$Gender, pch=19, cex=0.5)
+lines(l<-loess.sd(Ala$InfluenceScaled[which(Ala$Gender=="Female")]~Ala$WPRscaled[which(Ala$Gender=="Female")]),col="orchid")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("orchid",alpha.f=0.25),border=NA)
+lines(l<-loess.sd(Ala$InfluenceScaled[which(Ala$Gender=="Male")]~Ala$WPRscaled[which(Ala$Gender=="Male")]),col="forestgreen")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("forestgreen",alpha.f=0.25),border=NA)
+
+par(mar=c(4,4,0.5,0.5)) 
+plot(Ten$WPRscaled, Ten$GenerousScaled, axes=F, ylab="GoodGenerous", xlab="Weighted PageRank centrality")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+axis(2, lwd=0.5)
+axis(1, lwd=0.5)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ten$WPRscaled, Ten$GenerousScaled, col=Ten$Gender, pch=19, cex=0.5)
+lines(l<-loess.sd(Ten$GenerousScaled[which(Ten$Gender=="Female")]~Ten$WPRscaled[which(Ten$Gender=="Female")]),col="orchid")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("orchid",alpha.f=0.25),border=NA)
+lines(l<-loess.sd(Ten$GenerousScaled[which(Ten$Gender=="Male")]~Ten$WPRscaled[which(Ten$Gender=="Male")]),col="forestgreen")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("forestgreen",alpha.f=0.25),border=NA)
+
+par(mar=c(4,0.5,0.5,4))
+plot(Ala$WPRscaled, Ala$GenerousScaled, axes=F, ylab="", xlab="Weighted PageRank centrality")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+axis(1, lwd=0.5)
+points(Ala$WPRscaled, Ala$GenerousScale, col=Ala$Gender, pch=19, cex=0.5)
+lines(l<-loess.sd(Ala$GenerousScaled[which(Ala$Gender=="Female")]~Ala$WPRscaled[which(Ala$Gender=="Female")]),col="orchid")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("orchid",alpha.f=0.25),border=NA)
+lines(l<-loess.sd(Ala$GenerousScaled[which(Ala$Gender=="Male")]~Ala$WPRscaled[which(Ala$Gender=="Male")]),col="forestgreen")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("forestgreen",alpha.f=0.25),border=NA)
+legend("bottomright", c("Men", "Women"), pch=19, cex=0.75, pt.lwd=0, col=c( "forestgreen","orchid"), bty="n")
+dev.off()
+
+## Good Advice, Character
+# WITHOUT GENDER, LOESS
+require(msir)
+pdf("centrality_results_wpradvchar.pdf", height=3, width=3, pointsize=6)
+par(mfrow=c(2,2), mar=c(0.5,4,4,0.5))
+plot(Ten$WPRscaled, Ten$AllAdviceScaled, pch=19, cex=0.5, main="Tenpatti", axes=F, ylab="GivesGoodAdvice", xlab="")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+axis(2, lwd=0.5)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ten$WPRscaled, Ten$AllAdviceScaled, pch=19, cex=0.5)
+#lines(loess.smooth(Ten$WPRscaled, Ten$AllAdviceScaled, span = 0.8, degree = 1, family = c("gaussian")), lwd=1)
+lines(l<-loess.sd(Ten$AllAdviceScaled~Ten$WPRscaled))
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("black",alpha.f=0.25),border=NA)
+
+par(mar=c(0.5,0.5,4,4))
+plot(Ala$WPRscaled, Ala$AllAdviceScaled,  main="Azhagapuram", axes=F, ylab="", xlab="")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ala$WPRscaled, Ala$AllAdviceScaled, pch=19, cex=0.5)
+#lines(loess.smooth(Ala$WPRscaled, Ala$AllAdviceScaled, span = 0.8, degree = 1, family = c("gaussian")), lwd=1)
+lines(l<-loess.sd(Ala$AllAdviceScaled~Ala$WPRscaled))
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("black",alpha.f=0.25),border=NA)
+
+par(mar=c(4,4,0.5,0.5)) 
+plot(Ten$WPRscaled, Ten$CharacterScaled, axes=F, ylab="GoodCharacter", xlab="Weighted PageRank centrality")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+axis(2, lwd=0.5)
+axis(1, lwd=0.5)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ten$WPRscaled, Ten$CharacterScaled, pch=19, cex=0.5)
+lines(l<-loess.sd(Ten$CharacterScaled~Ten$WPRscaled))
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("black",alpha.f=0.25),border=NA)
+
+par(mar=c(4,0.5,0.5,4))
+plot(Ala$WPRscaled, Ala$CharacterScaled, axes=F, ylab="", xlab="Weighted PageRank centrality")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+axis(1, lwd=0.5)
+points(Ala$WPRscaled, Ala$CharacterScaled, pch=19, cex=0.5)
+lines(l<-loess.sd(Ala$CharacterScaled~Ala$WPRscaled))
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("black",alpha.f=0.25),border=NA)
+dev.off()
+
+
+# WITH GENDER, LOESS
+pdf("centrality_results_wpradvcharGEN.pdf", height=3, width=3, pointsize=6)
+par(mfrow=c(2,2), mar=c(0.5,4,4,0.5))
+plot(Ten$WPRscaled, Ten$AllAdviceScaled, pch=19, cex=0.5, main="Tenpatti", axes=F, ylab="GivesGoodAdvice", xlab="")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+axis(2, lwd=0.5)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ten$WPRscaled, Ten$AllAdviceScaled, col=Ten$Gender, pch=19, cex=0.5)
+lines(l<-loess.sd(Ten$AllAdviceScaled[which(Ten$Gender=="Female")]~Ten$WPRscaled[which(Ten$Gender=="Female")]),col="orchid")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("orchid",alpha.f=0.25),border=NA)
+lines(l<-loess.sd(Ten$AllAdviceScaled[which(Ten$Gender=="Male")]~Ten$WPRscaled[which(Ten$Gender=="Male")]),col="forestgreen")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("forestgreen",alpha.f=0.25),border=NA)
+
+
+par(mar=c(0.5,0.5,4,4))
+plot(Ala$WPRscaled, Ala$AllAdviceScaled,  main="Azhagapuram", axes=F, ylab="", xlab="")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ala$WPRscaled, Ala$AllAdviceScaled, col=Ala$Gender, pch=19, cex=0.5)
+lines(l<-loess.sd(Ala$AllAdviceScaled[which(Ala$Gender=="Female")]~Ala$WPRscaled[which(Ala$Gender=="Female")]),col="orchid")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("orchid",alpha.f=0.25),border=NA)
+lines(l<-loess.sd(Ala$AllAdviceScaled[which(Ala$Gender=="Male")]~Ala$WPRscaled[which(Ala$Gender=="Male")]),col="forestgreen")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("forestgreen",alpha.f=0.25),border=NA)
+
+par(mar=c(4,4,0.5,0.5)) 
+plot(Ten$WPRscaled, Ten$CharacterScaled, axes=F, ylab="GoodCharacter", xlab="Weighted PageRank centrality")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+axis(2, lwd=0.5)
+axis(1, lwd=0.5)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+points(Ten$WPRscaled, Ten$CharacterScaled, col=Ten$Gender, pch=19, cex=0.5)
+lines(l<-loess.sd(Ten$CharacterScaled[which(Ten$Gender=="Female")]~Ten$WPRscaled[which(Ten$Gender=="Female")]),col="orchid")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("orchid",alpha.f=0.25),border=NA)
+lines(l<-loess.sd(Ten$CharacterScaled[which(Ten$Gender=="Male")]~Ten$WPRscaled[which(Ten$Gender=="Male")]),col="forestgreen")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("forestgreen",alpha.f=0.25),border=NA)
+
+par(mar=c(4,0.5,0.5,4))
+plot(Ala$WPRscaled, Ala$CharacterScaled, axes=F, ylab="", xlab="Weighted PageRank centrality")
+rect(par("usr")[1],par("usr")[3],par("usr")[2],par("usr")[4], col = "white", lty=0)
+grid(NULL, col="grey90", lty=3, lwd=0.5)
+axis(1, lwd=0.5)
+points(Ala$WPRscaled, Ala$GenerousScale, col=Ala$Gender, pch=19, cex=0.5)
+lines(l<-loess.sd(Ala$CharacterScaled[which(Ala$Gender=="Female")]~Ala$WPRscaled[which(Ala$Gender=="Female")]),col="orchid")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("orchid",alpha.f=0.25),border=NA)
+lines(l<-loess.sd(Ala$CharacterScaled[which(Ala$Gender=="Male")]~Ala$WPRscaled[which(Ala$Gender=="Male")]),col="forestgreen")
+polygon(c(l$x,rev(l$x)),c(l$upper,rev(l$lower)),col=adjustcolor("forestgreen",alpha.f=0.25),border=NA)
+legend("bottomright", c("Men", "Women"), pch=19, cex=0.75, pt.lwd=0, col=c( "forestgreen","orchid"), bty="n")
+dev.off()
+
+```
+
+
+
+
+
+
+
