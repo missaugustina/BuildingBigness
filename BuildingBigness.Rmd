@@ -10,18 +10,19 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r includes}
-library(car)
-library(here)
+#library(car)
 library(igraph)
 
-require(intergraph)
-require(network)
-require(ergm)
+#require(intergraph)
+#require(network)
+#require(ergm)
 
 ```
 
 ```{r, message=FALSE}
+library(ergm)
 library(here)
+library(igraph)
 library(tidyverse)
 ```
 
@@ -39,6 +40,9 @@ Ten <- read_csv(here::here(params$data_dir, "TenMetadata.csv"))
 Ala <- read_csv(here::here(params$data_dir, "AlaMetadata.csv"))
 ```
 
+TODO! For this next section, make the graph processing into functions and then call for each dataset.
+1) social_support_graph, reputation_graph (example)
+
 ## Tenpatti
 
 Graphs of Reputation and Social Support.
@@ -48,7 +52,7 @@ Graphs of Reputation and Social Support.
 elTen <- read_csv(here::here(params$data_dir, "TenEdgeList.csv"))
 ```
 
-Social Support Graph
+### Social Support Graph
 
 ```{r social-support-tenpatti}
 
@@ -73,6 +77,8 @@ snaTenSupFull <- graph.data.frame(d = elSocTen, vertices = attTen, directed=TRUE
 snaTenSup <- delete_vertices(snaTenSupFull, which(degree(snaTenSupFull, mode="out")==0))
 ```
 
+### Reputation
+
 ```{r, reputation-tenpatti}
 
 ## To get networks of reputational nominations
@@ -80,14 +86,18 @@ snaTenFull <- graph.data.frame(d = elTen, directed=TRUE)
 # Remove 
 snaTenFull <- delete_vertices(snaTenFull, which(degree(snaTenFull, mode="out")==0))
 
+# TODO 1) function to simplify calling; 2) see where these are used to see if we can simplify further
+
 ## This represents a tie from A to B, if A nominated B
+## connection from A to B if A nominated B for any of the social actions associated with the reputation value
 snaTenGenerous <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "Generous") == 0])
 snaTenAllAdvice <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "AllAdvice") == 0])
 snaTenInfluence <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "Influence") == 0])
 snaTenCharacter <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "Character") == 0])
 snaTenStrength <- delete.edges(snaTenFull, E(snaTenFull)[get.edge.attribute(snaTenFull, name = "Strength") == 0])
 
-## This represents a tie from A to B, if B nominated A as 
+## This represents a tie from A to B, if B nominated A
+# connection from A to B if B nominated A for any social actions associated with the reputation value
 snaTenGenerousI <- graph.adjacency(t(get.adjacency(snaTenGenerous,sparse=FALSE)))
 snaTenAllAdviceI <- graph.adjacency(t(get.adjacency(snaTenAllAdvice,sparse=FALSE)))
 snaTenInfluenceI <- graph.adjacency(t(get.adjacency(snaTenInfluence,sparse=FALSE)))
@@ -136,6 +146,70 @@ snaAlaCharacterI <- graph.adjacency(t(get.adjacency(snaAlaCharacter,sparse=FALSE
 snaAlaStrengthI <- graph.adjacency(t(get.adjacency(snaAlaStrength,sparse=FALSE)))
 
 ```
+
+## Demographics
+
+### Kinship
+
+Whether two individuals are related as parent/child, siblings, or spouses.
+
+```{r, kinship}
+# uses car - can we use something else?
+
+# this blog factors kinship networks into the graph
+closekinEL <- read.csv("PublicFiles/CloseKinEdgeList.csv",header=TRUE)
+
+#require(car)
+
+# add the kinship assocations to the current social support graph by adding an edge weight
+# http://igraph.org/r/doc/E.html
+#kinship<-function(g){ 
+  g <- snaTenSup
+  kin <- V(g)$name # get the id's of the people
+  kinel <- expand.grid(kin,kin) # create a df from all combos
+  colnames(kinel) <- c("Ego","Alter") # set the colnames to ego alter
+  kinel$Edge <- paste(kinel[,1],kinel[,2],sep="_") # Create Edge column w/ "ego_alter"
+  kin1 <- merge(kinel,closekinEL[,c(3,4)],by="Edge",all.x=TRUE) # join with close kins (kin = 1)
+  # I thought this was instead of NA set the Kin column to 0 (meaning no kin connection)
+  #  but it seems to be actually setting the column to be NA=0, is that what she wants?
+  # original: kin1$Kin <- recode(kin1$Kin,"NA=0") 
+  # what i think she meant, but need to test
+  kin1[is.na(Kin)] <- 0
+  kin1$Edge<- NULL # remove Edge column
+  knet <- graph.data.frame(kin1) # create a graph from the data frame
+#  return(knet)
+#}
+
+# 1) make a list of ego/alter in the same format as the csv we're reading in, then merge to get edge weight
+# 2) create a new graph of Sup with kinship edge weight
+
+knetTen<-kinship(snaTenSup)
+knetAla<-kinship(snaAlaSup)
+
+# to test kinship, need to see if we can skip converting to statnet, can we use ergm directly w/igraph?
+
+```
+
+```{r, household-distance}
+TenIndivDist<-read.csv("PublicFiles/TenIndivDist.csv",as.is=TRUE)
+AlaIndivDist<-read.csv("PublicFiles/AlaIndivDist.csv",as.is=TRUE)
+# indiv1 indiv2 distance
+
+## first making empty matrix with names as the House ID
+Tendistancemat <-matrix(nrow=length(V(snaTenSup)$name),ncol=length(V(snaTenSup)$name),dimnames=list(as.vector(V(snaTenSup)$name),as.vector(V(snaTenSup)$name)))
+
+## fill in the values from the Distance file. This will take a moment.
+for(i in 1:nrow(TenIndivDist)){Tendistancemat[rownames(Tendistancemat)==TenIndivDist[i,1],colnames(Tendistancemat)==TenIndivDist[i,2]] <- as.numeric(TenIndivDist[i,3])}
+
+## Same for Alagapuram
+Aladistancemat <-matrix(nrow=length(V(snaAlaSup)$name),ncol=length(V(snaAlaSup)$name),dimnames=list(as.vector(V(snaAlaSup)$name),as.vector(V(snaAlaSup)$name)))
+for(i in 1:nrow(AlaIndivDist)){Aladistancemat[rownames(Aladistancemat)==AlaIndivDist[i,1],colnames(Aladistancemat)==AlaIndivDist[i,2]] <- as.numeric(AlaIndivDist[i,3])}
+
+```
+
+
+
+
 
 # NETWORK MEASURES OF SOCIAL CAPITAL vs. REPUTATION
 
